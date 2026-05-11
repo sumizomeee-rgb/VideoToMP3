@@ -23,11 +23,26 @@ MAX_CONCURRENCY = 16
 # ============================================================
 # 2. 配置加载
 # ============================================================
+DEFAULT_CONFIG = {
+    'outputDir': './output',
+    'tools': {
+        'ytdlpPath': './bin/yt-dlp.exe',
+        'ffmpegPath': './bin/ffmpeg.exe',
+    }
+}
+
 def load_config():
     config_path = os.path.join(ROOT_DIR, 'config', 'app.json')
-    with open(config_path, 'r', encoding='utf-8') as f:
-        cfg = json.load(f)
+    if os.path.isfile(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+    else:
+        cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
     cfg['outputDir'] = os.path.normpath(os.path.join(ROOT_DIR, cfg.get('outputDir', './output')))
+    cfg.setdefault('tools', {})
     cfg['tools']['ytdlpPath'] = os.path.normpath(os.path.join(ROOT_DIR, cfg['tools'].get('ytdlpPath', './bin/yt-dlp.exe')))
     cfg['tools']['ffmpegPath'] = os.path.normpath(os.path.join(ROOT_DIR, cfg['tools'].get('ffmpegPath', './bin/ffmpeg.exe')))
     return cfg
