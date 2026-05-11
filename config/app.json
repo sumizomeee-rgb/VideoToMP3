@@ -1,0 +1,8 @@
+{
+  "outputDir": "./output",
+  "maxConcurrency": 2,
+  "tools": {
+    "ytdlpPath": "./bin/yt-dlp.exe",
+    "ffmpegPath": "./bin/ffmpeg.exe"
+  }
+}
