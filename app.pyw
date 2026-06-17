@@ -80,7 +80,7 @@ def check_ytdlp():
     p = CONFIG['tools']['ytdlpPath']
     if os.path.isfile(p):
         try:
-            r = subprocess.run([p, '--version'], capture_output=True, timeout=10,
+            r = subprocess.run([p, '--version'], capture_output=True, timeout=30,
                                creationflags=subprocess.CREATE_NO_WINDOW)
             ver = r.stdout.decode('utf-8', errors='replace').strip()
             logger.log('INFO', f'yt-dlp found: v{ver}')
@@ -225,6 +225,10 @@ def worker_download(task, tq):
         args += ['-x', '--audio-format', fmt, '--audio-quality', '0']
     elif fmt == 'mp4':
         args += ['--merge-output-format', 'mp4']
+
+    cookie_file = os.path.join(ROOT_DIR, 'bilibili.com_cookies.txt')
+    if 'bilibili.com' in url and os.path.isfile(cookie_file):
+        args += ['--cookies', cookie_file]
 
     args += [
         '--no-playlist',
