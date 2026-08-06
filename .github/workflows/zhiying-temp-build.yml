@@ -1,0 +1,108 @@
+name: Temporary ZhiYing WPF Build
+
+on:
+  push:
+    branches:
+      - build/zhiying-wpf-v030-temp
+    paths:
+      - 'zhiying-temp/**'
+      - '.github/workflows/zhiying-temp-build.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'zhiying-temp/**'
+      - '.github/workflows/zhiying-temp-build.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          git checkout --detach FETCH_HEAD
+
+      - name: Reconstruct source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem zhiying-temp/source.part* | Sort-Object Name
+          if ($parts.Count -ne 5) { throw "Expected 5 source parts, found $($parts.Count)." }
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes('zhiying-temp/source.tgz', [Convert]::FromBase64String($b64))
+          $hash = (Get-FileHash zhiying-temp/source.tgz -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'e1f2f7b955a9dac8fc94497d410866f730d17f0df00ca4a2d0f3c0ad6d14e796') {
+            throw "Source archive checksum mismatch: $hash"
+          }
+          New-Item -ItemType Directory -Force zhiying-temp/src | Out-Null
+          tar -xzf zhiying-temp/source.tgz -C zhiying-temp/src
+
+          $xamlPath = 'zhiying-temp/src/ZhiYing/MainWindow.xaml'
+          $xaml = Get-Content $xamlPath -Raw
+          $xaml = $xaml.Replace('<Grid Grid.Row="0" Margin="20,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">', '<Grid Grid.Row="0" Margin="20,0">')
+          Set-Content -Path $xamlPath -Value $xaml -Encoding UTF8
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet --info
+          dotnet restore zhiying-temp/src/ZhiYing/ZhiYing.csproj
+          dotnet build zhiying-temp/src/ZhiYing/ZhiYing.csproj -c Release --no-restore
+
+      - name: Publish Windows x64
+        shell: pwsh
+        run: |
+          dotnet publish zhiying-temp/src/ZhiYing/ZhiYing.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o zhiying-temp/publish
+
+      - name: Package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path zhiying-temp/publish/ZhiYing.exe)) { throw 'ZhiYing.exe was not produced.' }
+          Copy-Item zhiying-temp/src/README.md zhiying-temp/publish/使用说明.md
+          "纸映 v0.3.0`r`nWindows x64 自包含单文件版`r`n构建提交: $env:GITHUB_SHA" | Set-Content -Encoding UTF8 zhiying-temp/publish/BUILD_INFO.txt
+          Compress-Archive -Path zhiying-temp/publish/* -DestinationPath zhiying-temp/ZhiYing-win-x64-v0.3.0.zip -Force
+          Compress-Archive -Path zhiying-temp/src/* -DestinationPath zhiying-temp/ZhiYing-source-v0.3.0.zip -Force
+          Get-FileHash zhiying-temp/ZhiYing-win-x64-v0.3.0.zip -Algorithm SHA256
+          Get-FileHash zhiying-temp/ZhiYing-source-v0.3.0.zip -Algorithm SHA256
+
+      - name: Upload artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force zhiying-temp/artifact-client | Out-Null
+          Push-Location zhiying-temp/artifact-client
+          npm init -y
+          npm install @actions/artifact@6.2.1 --no-audit --no-fund
+          @'
+          import path from 'node:path';
+          import { DefaultArtifactClient } from '@actions/artifact';
+
+          async function main() {
+            const root = path.resolve(process.cwd(), '..');
+            const files = [
+              path.join(root, 'ZhiYing-win-x64-v0.3.0.zip'),
+              path.join(root, 'ZhiYing-source-v0.3.0.zip')
+            ];
+            const client = new DefaultArtifactClient();
+            const result = await client.uploadArtifact('ZhiYing-v0.3.0', files, root, {
+              retentionDays: 7,
+              compressionLevel: 0
+            });
+            console.log(JSON.stringify(result));
+          }
+
+          main().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          '@ | Set-Content -Encoding UTF8 upload.mjs
+          node upload.mjs
+          Pop-Location

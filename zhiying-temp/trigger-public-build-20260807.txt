@@ -1,0 +1,1 @@
+Trigger public Windows build after installing the workflow on the default branch.
