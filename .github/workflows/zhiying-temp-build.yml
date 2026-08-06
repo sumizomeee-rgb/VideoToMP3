@@ -7,6 +7,12 @@ on:
     paths:
       - 'zhiying-temp/**'
       - '.github/workflows/zhiying-temp-build.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'zhiying-temp/**'
+      - '.github/workflows/zhiying-temp-build.yml'
 
 permissions:
   contents: read
